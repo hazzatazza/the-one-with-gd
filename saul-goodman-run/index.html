@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+
+    <base href="https://cdn.jsdelivr.net/gh/marty-games/mga-unity@main/saul-goodman-run/">
+
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <title>Saul Goodman Run</title>
+
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            background: black;
+            font-family: Arial, sans-serif;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* particle background */
+
+        #bg-canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+        }
+
+        /* loader */
+
+        #loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+            z-index: 2;
+        }
+
+        #title {
+            font-size: 3em;
+            font-weight: bold;
+            text-shadow:
+                0 0 5px #0ff,
+                0 0 10px #0ff,
+                0 0 20px #0ff,
+                0 0 30px #0ff;
+        }
+
+        /* progress bar */
+
+        #progress-bar {
+            width: 420px;
+            height: 12px;
+            background: #111;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 3px #0ff, 0 0 8px rgba(0, 255, 255, .4);
+        }
+
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #0ff;
+            border-radius: 10px;
+            box-shadow: 0 0 4px #0ff, 0 0 10px rgba(0, 255, 255, .6);
+            transition: width .25s;
+        }
+
+        #loading-text {
+            font-size: 18px;
+            text-shadow: 0 0 4px #fff, 0 0 8px #fff;
+        }
+
+        /* unity canvas */
+
+        #gameContainer {
+            position: absolute;
+        }
+
+        #unity-canvas {
+            position: absolute;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <div id="loader">
+
+        <div id="title">Saul Goodman Run</div>
+
+        <div id="progress-bar">
+            <div id="progress-fill"></div>
+        </div>
+
+        <div id="loading-text">Preparing game...</div>
+
+    </div>
+
+    <div id="gameContainer">
+        <canvas id="unity-canvas" data-pixel-art></canvas>
+    </div>
+
+    <script src="Build/loader.js"></script>
+
+    <script>
+        /* PARTICLE BACKGROUND */
+
+        const canvasBG = document.getElementById("bg-canvas");
+        const ctx = canvasBG.getContext("2d");
+
+        const MAX_PARTICLES = 50;
+        const MAX_DISTANCE = 100;
+
+        const COLORS = [
+            "#00ffff",
+            "#ff00ff",
+            "#ffff00",
+            "#00ff00",
+            "#ff0080"
+        ];
+
+        let particles = [];
+        let animationId;
+
+        function initBackground() {
+
+            canvasBG.width = window.innerWidth;
+            canvasBG.height = window.innerHeight;
+
+            particles = [];
+
+            for (let i = 0; i < MAX_PARTICLES; i++) {
+
+                particles.push({
+
+                    x: Math.random() * canvasBG.width,
+                    y: Math.random() * canvasBG.height,
+                    size: Math.random() * 3 + 1,
+                    speedX: (Math.random() - 0.5) * 1.2,
+                    speedY: (Math.random() - 0.5) * 1.2,
+                    color: COLORS[Math.floor(Math.random() * COLORS.length)]
+
+                });
+
+            }
+
+        }
+
+        function drawConnections() {
+
+            for (let a = 0; a < particles.length; a++) {
+
+                for (let b = a + 1; b < particles.length; b++) {
+
+                    const dx = particles[a].x - particles[b].x;
+                    const dy = particles[a].y - particles[b].y;
+
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < MAX_DISTANCE) {
+
+                        ctx.beginPath();
+
+                        const color = particles[a].color;
+
+                        ctx.strokeStyle = color;
+                        ctx.globalAlpha = 0.5 - distance / (2 * MAX_DISTANCE);
+
+                        ctx.moveTo(particles[a].x, particles[a].y);
+                        ctx.lineTo(particles[b].x, particles[b].y);
+
+                        ctx.shadowBlur = 10;
+                        ctx.shadowColor = color;
+
+                        ctx.stroke();
+
+                        ctx.globalAlpha = 1;
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        function animateBackground() {
+
+            ctx.clearRect(0, 0, canvasBG.width, canvasBG.height);
+
+            particles.forEach(p => {
+
+                p.x += p.speedX;
+                p.y += p.speedY;
+
+                if (p.x < 0 || p.x > canvasBG.width) p.speedX *= -1;
+                if (p.y < 0 || p.y > canvasBG.height) p.speedY *= -1;
+
+                ctx.beginPath();
+
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 8;
+
+                ctx.fill();
+
+            });
+
+            drawConnections();
+
+            animationId = requestAnimationFrame(animateBackground);
+
+        }
+
+        window.addEventListener("resize", initBackground);
+
+        initBackground();
+        animateBackground();
+
+        /* LOADER */
+
+        const loadingText = document.querySelector("#loading-text");
+        const progressFill = document.querySelector("#progress-fill");
+
+        let totalBytes = 0;
+        let loadedBytes = 0;
+
+        function formatSize(bytes) {
+            if (bytes > 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+            if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+            if (bytes > 1024) return (bytes / 1024).toFixed(2) + " KB";
+            return bytes + " B";
+        }
+
+        async function getSize(url) {
+            try {
+                const res = await fetch(url, {
+                    method: "HEAD"
+                });
+                return parseInt(res.headers.get("Content-Length") || "0", 10);
+            } catch {
+                return 0;
+            }
+        }
+
+        async function fetchPart(url) {
+
+            const response = await fetch(url);
+
+            const reader = response.body.getReader();
+
+            const chunks = [];
+            let received = 0;
+
+            while (true) {
+
+                const {
+                    done,
+                    value
+                } = await reader.read();
+
+                if (done) break;
+
+                received += value.length;
+                loadedBytes += value.length;
+
+                chunks.push(value);
+
+                const percent = totalBytes > 0 ? ((loadedBytes / totalBytes) * 100).toFixed(1) : "?";
+
+                loadingText.textContent =
+                    `Loading ${formatSize(loadedBytes)} / ${formatSize(totalBytes)} (${percent}%)`;
+
+                progressFill.style.width = percent + "%";
+
+            }
+
+            const full = new Uint8Array(received);
+
+            let offset = 0;
+
+            for (let chunk of chunks) {
+                full.set(chunk, offset);
+                offset += chunk.length;
+            }
+
+            return full;
+
+        }
+
+        async function mergeParts(parts, mimeType) {
+
+            const buffers = await Promise.all(parts.map(fetchPart));
+
+            const totalLen = buffers.reduce((s, b) => s + b.length, 0);
+
+            const concatenated = new Uint8Array(totalLen);
+
+            let off = 0;
+
+            for (let b of buffers) {
+                concatenated.set(b, off);
+                off += b.length;
+            }
+
+            return URL.createObjectURL(new Blob([concatenated], {
+                type: mimeType || undefined
+            }));
+
+        }
+
+        function getParts(file, count) {
+            const parts = [];
+            for (let i = 1; i <= count; i++) parts.push(file + ".part" + i);
+            return parts;
+        }
+
+        (async () => {
+
+            try {
+
+                const dataParts = getParts("Build/data.data", 2);
+                const wasmParts = getParts("Build/wasm.wasm", 2);
+
+                const allParts = [...dataParts, ...wasmParts, "Build/framework.js"];
+
+                const sizes = await Promise.all(allParts.map(getSize));
+
+                totalBytes = sizes.reduce((a, b) => a + b, 0);
+
+                const [dataUrl, wasmUrl, frameworkUrl] = await Promise.all([
+                    mergeParts(dataParts),
+                    mergeParts(wasmParts),
+                    mergeParts(["Build/framework.js"], "application/javascript")
+                ]);
+
+                const canvas = document.querySelector("#unity-canvas");
+
+                function onResize() {
+
+                    const container = canvas.parentElement;
+
+                    let w = window.innerWidth;
+                    let h = window.innerHeight;
+
+                    const r = 540 / 960;
+
+                    if (w * r > window.innerHeight) w = Math.min(w, Math.ceil(h / r));
+
+                    h = Math.floor(w * r);
+
+                    container.style.width = canvas.style.width = w + "px";
+                    container.style.height = canvas.style.height = h + "px";
+
+                    container.style.top = Math.floor((window.innerHeight - h) / 2) + "px";
+                    container.style.left = Math.floor((window.innerWidth - w) / 2) + "px";
+
+                }
+
+                window.addEventListener("resize", onResize);
+
+                onResize();
+
+                await new Promise(resolve => {
+                    const check = setInterval(() => {
+                        if (typeof createUnityInstance === "function") {
+                            clearInterval(check);
+                            resolve();
+                        }
+                    }, 50);
+                });
+
+                const config = {
+                    dataUrl: dataUrl,
+                    frameworkUrl: frameworkUrl,
+                    codeUrl: wasmUrl,
+                    streamingAssetsUrl: "StreamingAssets",
+                    companyName: "Marty Games",
+                    productName: "Saul Goodman Run",
+                    productVersion: "1.0"
+                };
+
+                createUnityInstance(canvas, config, (progress) => {
+
+                    const percent = Math.round(progress * 100);
+
+                    loadingText.textContent = `Loading ${percent}%`;
+
+                    progressFill.style.width = percent + "%";
+
+                }).then(() => {
+
+                    document.getElementById("loader").style.display = "none";
+
+                    cancelAnimationFrame(animationId);
+
+                    canvasBG.style.display = "none";
+
+                });
+
+            } catch (err) {
+
+                loadingText.textContent = "ERROR: " + (err.message || err);
+
+            }
+
+        })();
+    </script>
+
+</body>
+
+</html>
